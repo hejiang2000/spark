@@ -227,6 +227,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
+    /*
     if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
       !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
@@ -234,6 +235,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         "directory.")
       stagingPathName = new Path(inputPathName, ".hive-staging").toString
     }
+    */
 
     val dir: Path =
       fs.makeQualified(

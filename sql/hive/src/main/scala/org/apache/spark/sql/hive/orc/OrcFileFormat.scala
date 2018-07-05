@@ -22,6 +22,9 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -124,7 +127,12 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, f.toKryo)
+        val out = new Output(4 * 1024, 10 * 1024 * 1024)
+        new Kryo().writeObject(out, f)
+        out.close()
+
+        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN,
+          Base64.encodeBase64String(out.toBytes))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }

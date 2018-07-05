@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 
 import org.apache.spark.internal.Logging
@@ -88,6 +88,15 @@ private[orc] object OrcFilters extends Logging {
       case _ => false
     }
 
+    def toPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
+      case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
+      case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
+      case _: DecimalType => PredicateLeaf.Type.DECIMAL
+      case StringType => PredicateLeaf.Type.STRING
+      case TimestampType => PredicateLeaf.Type.TIMESTAMP
+      case _ => PredicateLeaf.Type.DECIMAL
+    }
+
     expression match {
       case And(left, right) =>
         // At here, it is not safe to just convert one side if we do not understand the
@@ -123,31 +132,40 @@ private[orc] object OrcFilters extends Logging {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().equals(attribute, value).end())
+        Some(builder.startAnd().equals(attribute.toString,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
+        Some(builder.startAnd().nullSafeEquals(attribute,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThan(attribute, value).end())
+        Some(builder.startAnd().lessThan(attribute,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThanEquals(attribute, value).end())
+        Some(builder.startAnd().lessThanEquals(attribute,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThanEquals(attribute, value).end())
+        Some(builder.startNot().lessThanEquals(attribute,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThan(attribute, value).end())
+        Some(builder.startNot().lessThan(attribute,
+          toPredicateLeafType(dataTypeMap(attribute)), value).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute).end())
+        Some(builder.startAnd().isNull(attribute,
+          toPredicateLeafType(dataTypeMap(attribute))).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute).end())
+        Some(builder.startNot().isNull(attribute,
+          toPredicateLeafType(dataTypeMap(attribute))).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
+        Some(builder.startAnd().in(attribute, toPredicateLeafType(dataTypeMap(attribute)),
+          values.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }
